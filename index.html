@@ -124,6 +124,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
 .mf { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .mf select, .mf input { font: inherit; font-size: 13px; color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
 .mf select:disabled { opacity: .5; }
+.mf input[type=date] { width: 132px; }
 </style>
 
 <style>html{-webkit-text-size-adjust:100%}body{margin:0}</style>
@@ -236,6 +237,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
         <button type="button" data-k="station" aria-pressed="false">駅別</button>
         <button type="button" data-k="layout" aria-pressed="false">間取り別</button>
       </div>
+      <label class="mf" id="mPerLbl">期間
+        <select id="mPer"><option value="all">すべて</option><option value="30">直近30日</option><option value="90">直近3か月</option><option value="180">直近半年</option><option value="365">直近1年</option><option value="custom">日付で指定</option></select>
+      </label>
+      <span class="mf" id="mPerCustom" hidden><input type="date" id="mFrom" aria-label="開始日"> 〜 <input type="date" id="mTo" aria-label="終了日"></span>
       <label class="mf" id="mWardLbl" hidden>区
         <select id="mWard"><option value="all">すべて</option></select>
       </label>
@@ -244,7 +249,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
           <option value="all">すべて</option><option value="2016-">2016年〜</option><option value="2006-2015">2006〜2015年</option><option value="1982-2005">1982〜2005年</option><option value="-1981">〜1981年</option>
         </select>
       </label>
-      <label class="mf" id="mYearLbl" hidden>または 竣工
+      <label class="mf" id="mAgeLbl" hidden>または 築
+        <input type="number" id="mAge" min="0" max="100" step="1" placeholder="例：10" inputmode="numeric" style="width:64px"> 年以内
+      </label>
+      <label class="mf" id="mYearLbl" hidden>竣工
         <input type="number" id="mYear" min="1950" max="2100" step="1" placeholder="例：2010" inputmode="numeric" style="width:84px"> 年以降
       </label>
     </div>
@@ -542,8 +550,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
   function renderBreakdown() {
     const k = state.mKind, view = M.view;
     const yr = parseInt($('mYear').value, 10); const useYr = Number.isFinite(yr) && yr >= 1950;
-    $('mBand').disabled = useYr;
-    const band = useYr ? 'all' : $('mBand').value;
+    const age = parseInt($('mAge').value, 10); const useAge = Number.isFinite(age) && age >= 0;
+    const minYear = Math.max(useYr ? yr : 0, useAge ? new Date().getFullYear() - age : 0);
+    $('mBand').disabled = useYr || useAge;
+    const band = (useYr || useAge) ? 'all' : $('mBand').value;
     const ls0 = state.listings.filter((r) => r.kind === k);
     const latest = ls0.reduce((m, r) => (r.last_seen > m ? r.last_seen : m), '');
     const wardSel = $('mWard'); const wards = [...new Set(ls0.map((r) => r.ward).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
@@ -552,7 +562,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     wardSel.value = wards.includes(cur) ? cur : 'all';
     const ward = wardSel.value;
     const ls = ls0.filter((r) => r.last_seen === latest && r.unit_price != null && isFinite(r.unit_price)
-      && (ward === 'all' || r.ward === ward) && (band === 'all' || bandOf(r.built_year) === band) && (!useYr || (r.built_year != null && r.built_year >= yr)));
+      && (ward === 'all' || r.ward === ward) && (band === 'all' || bandOf(r.built_year) === band) && (!minYear || (r.built_year != null && r.built_year >= minYear)));
     const groups = new Map();
     ls.forEach((r) => { const key = view === 'station' ? r.st : r.bl; if (!key) return; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(r); });
     const rows = [...groups.entries()].map(([key, g]) => {
@@ -563,7 +573,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     const conv = (u) => (k === 'rent' ? u : u * 3.30579 / 1e4);
     const fmtU = (u) => (k === 'rent' ? Math.round(u).toLocaleString('ja-JP') + '円/㎡' : conv(u).toFixed(0) + '万円/坪');
     const max = Math.max(...shown.map((r) => conv(r.med)), 1);
-    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場${useYr ? '・竣工' + yr + '年以降' : ''}（${latest ? latest.slice(5).replace('-', '/') : '—'} の集計・${ls.length}件）`;
+    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場${useAge ? '・築' + age + '年以内' : ''}${useYr ? '・竣工' + yr + '年以降' : ''}（${latest ? latest.slice(5).replace('-', '/') : '—'} の集計・${ls.length}件）`;
     $('bdList').innerHTML = shown.length ? shown.map((r) => `<div class="bd-row ${r.n < 5 ? 'low' : ''}">
         <span class="lab">${esc(r.key)}</span>
         <span class="bar1"><i style="width:${(conv(r.med) / max * 100).toFixed(1)}%"></i></span>
@@ -575,33 +585,41 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
   $('mViewSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; M.view = b.dataset.k; setSeg('mViewSeg', M.view); renderMarket(); });
   $('mWard').addEventListener('change', renderMarket);
   $('mYear').addEventListener('input', renderMarket);
+  $('mAge').addEventListener('input', renderMarket);
+  ['mPer', 'mFrom', 'mTo'].forEach((id) => $(id).addEventListener('change', renderMarket));
   function renderMarket() {
     const wardView = M.view === 'ward';
-    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('mWardLbl').hidden = wardView; $('mYearLbl').hidden = wardView;
+    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('mWardLbl').hidden = wardView; $('mYearLbl').hidden = wardView; $('mAgeLbl').hidden = wardView;
+    $('mPerLbl').hidden = !wardView; $('mPerCustom').hidden = !wardView || $('mPer').value !== 'custom';
+    if (wardView) $('mBand').disabled = false;
     if (!wardView) { renderBreakdown(); return; }
     const k = state.mKind, band = $('mBand').value;
     const rows = state.stats.filter((s) => s.kind === k && s.band === band);
     const dates = [...new Set(rows.map((s) => s.run_date))].sort();
+    const pv = $('mPer').value; const endD = dates[dates.length - 1];
+    const inRange = (d) => pv === 'all' ? true : pv === 'custom' ? ((!$('mFrom').value || d >= $('mFrom').value) && (!$('mTo').value || d <= $('mTo').value))
+      : d >= new Date(new Date(endD).getTime() - Number(pv) * 864e5).toISOString().slice(0, 10);
+    const cdates = dates.filter(inRange); const crows = rows.filter((s) => inRange(s.run_date));
     const wards = [...new Set(rows.map((s) => s.ward))].sort((a, b) => (a === '全体') - (b === '全体') || a.localeCompare(b, 'ja'));
     $('chartTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${BANDS[band]}：区別の中央値の推移（${k === 'rent' ? '円/㎡・管理費込み' : '万円/坪'}）`;
     const val = (s) => k === 'rent' ? Number(s.median_unit) : Number(s.median_unit) * 3.30579 / 1e4;
     const chart = $('chart'), legend = $('legend');
-    if (dates.length < 2) {
-      chart.innerHTML = `<div class="empty">推移のグラフは2日分以上のデータがたまると表示されます（現在 ${dates.length} 日分）。</div>`;
+    if (cdates.length < 2) {
+      chart.innerHTML = dates.length >= 2 ? `<div class="empty">この期間のデータが2日分未満です。期間を広げてください（選んだ期間に ${cdates.length} 日分）。</div>` : `<div class="empty">推移のグラフは2日分以上のデータがたまると表示されます（現在 ${dates.length} 日分）。</div>`;
       legend.innerHTML = '';
     } else {
       const W = 720, H = 260, L = 56, R = 16, T = 12, B = 30;
-      const pts = rows.map(val).filter((v) => isFinite(v));
+      const pts = crows.map(val).filter((v) => isFinite(v));
       let lo = Math.min(...pts), hi = Math.max(...pts); const pad = (hi - lo) * 0.1 || hi * 0.05 || 1; lo -= pad; hi += pad;
-      const x = (d) => L + (dates.indexOf(d) / (dates.length - 1)) * (W - L - R);
+      const x = (d) => L + (cdates.indexOf(d) / (cdates.length - 1)) * (W - L - R);
       const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
       const ticks = 4; let g = '';
       for (let i = 0; i <= ticks; i++) { const v = lo + (hi - lo) * i / ticks; const yy = y(v); g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${k === 'rent' ? Math.round(v).toLocaleString('ja-JP') : v.toFixed(0)}</text>`; }
-      const step = Math.max(1, Math.ceil(dates.length / 6));
-      dates.forEach((d, i) => { if (i % step === 0 || i === dates.length - 1) g += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${d.slice(5).replace('-', '/')}</text>`; });
+      const step = Math.max(1, Math.ceil(cdates.length / 6));
+      cdates.forEach((d, i) => { if (i % step === 0 || i === cdates.length - 1) g += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${d.slice(5).replace('-', '/')}</text>`; });
       wards.forEach((w, i) => {
         const c = COLORS[i % COLORS.length];
-        const ser = rows.filter((s) => s.ward === w).sort((a, b) => a.run_date.localeCompare(b.run_date));
+        const ser = crows.filter((s) => s.ward === w).sort((a, b) => a.run_date.localeCompare(b.run_date));
         const path = ser.map((s, j) => (j ? 'L' : 'M') + x(s.run_date).toFixed(1) + ' ' + y(val(s)).toFixed(1)).join(' ');
         const last = ser[ser.length - 1];
         g += `<path d="${path}" fill="none" stroke="${c}" stroke-width="${w === '全体' ? 1.5 : 2}" ${w === '全体' ? 'stroke-dasharray="4 3"' : ''}/>`;
