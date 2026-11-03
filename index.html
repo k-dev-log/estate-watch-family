@@ -261,6 +261,12 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
       <div id="bdList" class="bd"></div>
       <p class="note" id="bdNote"></p>
     </div>
+    <div class="panel chart" id="bdTrend" hidden>
+      <h2 id="bdTrendTitle"></h2>
+      <div id="bdChart"></div>
+      <div class="legend" id="bdLegend"></div>
+      <p class="note" id="bdTrendNote"></p>
+    </div>
     <div class="panel chart" id="chartPanel">
       <h2 id="chartTitle">区別の中央値の推移</h2>
       <div id="chart"></div>
@@ -545,6 +551,44 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
 
   // ---------- market ----------
   const M = { view: 'ward' };
+  const periodFn = (dates) => {
+    const pv = $('mPer').value; const endD = dates[dates.length - 1];
+    return (d) => pv === 'all' ? true : pv === 'custom' ? ((!$('mFrom').value || d >= $('mFrom').value) && (!$('mTo').value || d <= $('mTo').value))
+      : d >= new Date(new Date(endD).getTime() - Number(pv) * 864e5).toISOString().slice(0, 10);
+  };
+  function renderTrend() {
+    const k = state.mKind, view = M.view, label = view === 'station' ? '駅' : '間取り';
+    const rows = (state.dimStats || []).filter((s) => s.kind === k && s.dim === view && s.band === 'all');
+    const dates = [...new Set(rows.map((s) => s.run_date))].sort();
+    const inR = periodFn(dates); const cdates = dates.filter(inR);
+    $('bdTrendTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${label}別の中央値の推移（${k === 'rent' ? '円/㎡・管理費込み' : '万円/坪'}・築年帯すべて）`;
+    const chart = $('bdChart'), legend = $('bdLegend');
+    $('bdTrendNote').textContent = `${label}別の推移は、2026-11-04 の集計からためています。件数の多い上位6${view === 'station' ? '駅' : '種類'}を表示します。築年帯・竣工年・築年数の指定は、上の棒グラフだけに効きます。`;
+    if (!dates.length) { chart.innerHTML = '<div class="empty">まだデータがありません。次回の自動集計から、毎日ためていきます。</div>'; legend.innerHTML = ''; return; }
+    if (cdates.length < 2) { chart.innerHTML = `<div class="empty">推移のグラフは2日分以上たまると表示されます（選んだ期間に ${cdates.length} 日分）。</div>`; legend.innerHTML = ''; return; }
+    const last = cdates[cdates.length - 1];
+    const names = rows.filter((s) => s.run_date === last).sort((a, b) => b.n - a.n).slice(0, 6).map((s) => s.ward);
+    const val = (s) => (k === 'rent' ? Number(s.median_unit) : Number(s.median_unit) * 3.30579 / 1e4);
+    const sel = rows.filter((s) => names.includes(s.ward) && inR(s.run_date));
+    const W = 720, H = 260, L = 56, R = 16, T = 12, B = 30;
+    const pts = sel.map(val).filter((v) => isFinite(v));
+    let lo = Math.min(...pts), hi = Math.max(...pts); const pad = (hi - lo) * 0.1 || hi * 0.05 || 1; lo -= pad; hi += pad;
+    const x = (d) => L + (cdates.indexOf(d) / (cdates.length - 1)) * (W - L - R);
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    let g = '';
+    for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; const yy = y(v); g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${k === 'rent' ? Math.round(v).toLocaleString('ja-JP') : v.toFixed(0)}</text>`; }
+    const step = Math.max(1, Math.ceil(cdates.length / 6));
+    cdates.forEach((d, i) => { if (i % step === 0 || i === cdates.length - 1) g += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${d.slice(5).replace('-', '/')}</text>`; });
+    names.forEach((nm, i) => {
+      const c = COLORS[i % COLORS.length];
+      const ser = sel.filter((s) => s.ward === nm).sort((a, b) => a.run_date.localeCompare(b.run_date));
+      if (!ser.length) return;
+      g += `<path d="${ser.map((s, j) => (j ? 'L' : 'M') + x(s.run_date).toFixed(1) + ' ' + y(val(s)).toFixed(1)).join(' ')}" fill="none" stroke="${c}" stroke-width="2"/>`;
+      g += `<circle cx="${x(ser[ser.length - 1].run_date)}" cy="${y(val(ser[ser.length - 1]))}" r="3" fill="${c}"/>`;
+    });
+    chart.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}別の中央値の推移">${g}</svg>`;
+    legend.innerHTML = names.map((nm, i) => `<span><i style="background:${COLORS[i % COLORS.length]}"></i>${esc(nm)}</span>`).join('');
+  }
   const bandOf = (y) => !y ? '不明' : y >= 2016 ? '2016-' : y >= 2006 ? '2006-2015' : y >= 1982 ? '1982-2005' : '-1981';
   const quant = (a, p) => { const s = a.slice().sort((x, y) => x - y); const i = (s.length - 1) * p; const lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); };
   function renderBreakdown() {
@@ -579,7 +623,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
         <span class="val">${fmtU(r.med)}</span>
         <span class="sub2">${r.n}件${r.n < 5 ? '（件数が少ないので参考値）' : ''} ・ 下位25% ${fmtU(r.p25)}${r.price != null ? ' ・ 価格の中央値 ' + (k === 'rent' ? yen(r.price) + '円' : manYen(r.price)) : ''}</span>
       </div>`).join('') : EMPTY('この条件に合う物件がありません。');
-    $('bdNote').textContent = (rows.length > LIM ? `件数の多い上位${LIM}件を表示しています。` : '') + '登録済みの全物件（掲載が終わった物件も含む）の中央値です。推移ではありません（駅別・間取り別の履歴は、これからためます）。' + (k === 'rent' ? '賃貸は管理費込みの月額の㎡単価です。' : '売買は掲載価格の坪単価です（成約価格ではありません）。');
+    $('bdNote').textContent = (rows.length > LIM ? `件数の多い上位${LIM}件を表示しています。` : '') + '登録済みの全物件（掲載が終わった物件も含む）の中央値です。推移ではありません（推移は下のグラフ）。' + (k === 'rent' ? '賃貸は管理費込みの月額の㎡単価です。' : '売買は掲載価格の坪単価です（成約価格ではありません）。');
   }
   $('mViewSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; M.view = b.dataset.k; setSeg('mViewSeg', M.view); renderMarket(); });
   $('mWard').addEventListener('change', renderMarket);
@@ -588,10 +632,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
   ['mPer', 'mFrom', 'mTo'].forEach((id) => $(id).addEventListener('change', renderMarket));
   function renderMarket() {
     const wardView = M.view === 'ward';
-    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('mWardLbl').hidden = wardView; $('mYearLbl').hidden = wardView; $('mAgeLbl').hidden = wardView;
-    $('mPerLbl').hidden = !wardView; $('mPerCustom').hidden = !wardView || $('mPer').value !== 'custom';
+    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('bdTrend').hidden = wardView; $('mWardLbl').hidden = wardView; $('mYearLbl').hidden = wardView; $('mAgeLbl').hidden = wardView;
+    $('mPerCustom').hidden = $('mPer').value !== 'custom';
     if (wardView) $('mBand').disabled = false;
-    if (!wardView) { renderBreakdown(); return; }
+    if (!wardView) { renderBreakdown(); renderTrend(); return; }
     const k = state.mKind, band = $('mBand').value;
     const rows = state.stats.filter((s) => s.kind === k && s.band === band);
     const dates = [...new Set(rows.map((s) => s.run_date))].sort();
@@ -661,7 +705,8 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
       state.me = d.me || '';
       state.listings = (d.listings || []).map(normListing);
       state.events = (d.events || []).map((e) => ({ ...e, id: Number(e.id), price: toNum(e.price), prev_price: toNum(e.prev_price) }));
-      state.stats = d.stats || [];
+      const st0 = d.stats || [];
+      state.stats = st0.filter((s) => (s.dim || 'ward') === 'ward'); state.dimStats = st0.filter((s) => s.dim && s.dim !== 'ward');
       state.byCode = new Map(state.listings.map((r) => [r.code, r]));
       state.evByCode = new Map(); state.events.forEach((e) => { if (!state.evByCode.has(e.code)) state.evByCode.set(e.code, []); state.evByCode.get(e.code).push(e); });
       state.lastVisit = store.get('ew-last', null);
