@@ -15,12 +15,12 @@
   --ink: #1b2a36;
   --muted: #5d6b76;
   --line: #d9e0e5;
-  --accent: #1f5c7a;
+  --accent: #174e6b;
   --accent-soft: #e3eef4;
-  --good: #1e7a52;
+  --good: #17694a;
   --good-soft: #e2f2ea;
-  --down: #b4442b;
-  --down-soft: #f8e6e1;
+  --down: #a63a22;
+  --down-soft: #fbe9e4;
   --warn: #8a6410;
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -117,6 +117,13 @@ textarea { min-height: 64px; resize: vertical; }
 label.inl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
 label.inl select { font: inherit; font-size: 13px; color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
 @media (prefers-reduced-motion: no-preference) { .item { transition: opacity .2s; } }
+.sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sum button { font: inherit; text-align: left; background: var(--accent-soft); border: 1px solid transparent; border-radius: 8px; padding: 10px 12px; color: var(--ink); cursor: pointer; min-width: 0; }
+.sum button:hover { border-color: var(--accent); }
+.sum small { display: block; font-size: 12px; color: var(--muted); }
+.sum strong { font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.sum .sn strong { color: var(--good); } .sum .sd strong { color: var(--down); }
+.sum .sdate { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); margin: 0; }
 </style>
 
 <style>html{-webkit-text-size-adjust:100%}body{margin:0}</style>
@@ -150,6 +157,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
       </div>
       <button class="btn" type="button" id="reload">再読み込み</button>
     </div>
+    <div class="sum" id="hSum"></div>
     <p class="note" id="hNote">メールで知らせた物件の履歴です。初回の基準登録（条件に合う物件を最初にまとめて記録した分）は、通知していないので載りません。条件に合う全件は「物件一覧」で探せます。</p>
     <div id="histList" style="display:grid;gap:18px"><div class="empty">履歴を読み込んでいます。</div></div>
   </section>
@@ -318,10 +326,11 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     const prev = ev ? ev.prev_price : (isDown ? r.prev_price : null);
     const d = r.discount;
     const tr = o.trail ? trailOf(r.code) : '';
+    const cut = (isDown && prev != null && price != null && prev > price) ? ' −' + priceTxt(r.kind, prev - price) : '';
     return `<article class="item ${r.status === 'dismissed' ? 'dismissed' : ''}" data-code="${esc(r.code)}">
       <div class="item-top">
         <span class="chip ${r.kind}">${r.kind === 'rent' ? '賃貸' : '売買'}</span>
-        ${ev ? `<span class="chip ${ev.type === 'down' ? 'down' : 'newc'}">${ev.type === 'down' ? '値下げ' : '新着'}</span>` : isDown ? '<span class="chip down">値下げ</span>' : ''}
+        ${ev ? `<span class="chip ${ev.type === 'down' ? 'down' : 'newc'}">${ev.type === 'down' ? '値下げ' + cut : '新着'}</span>` : isDown ? `<span class="chip down">値下げ${cut}</span>` : ''}
         ${o.fresh ? '<span class="chip fresh">前回から</span>' : ''}
         <span class="item-name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a></span>
         ${d > 0 ? `<span class="chip disc num">駅相場より −${d.toFixed(0)}%</span>` : d < 0 ? `<span class="chip low num">駅相場より +${Math.abs(d).toFixed(0)}%</span>` : ''}
@@ -353,7 +362,24 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
 
   // ---------- history ----------
   const H = { kind: 'all', type: 'all', days: 14 };
+  function renderSum() {
+    const el = $('hSum'); if (!el) return;
+    const latest = state.events.length ? state.events[0].event_date : null;
+    const g = latest ? state.events.filter((e) => e.event_date === latest && state.byCode.has(e.code)) : [];
+    const n = g.filter((e) => e.type === 'new').length; const dn = g.length - n;
+    const fav = [...state.byCode.values()].filter((r) => r.status === 'interested').length;
+    el.innerHTML = `<p class="sdate">${latest ? '直近の通知日 ' + fmtDate(latest) : '通知はまだありません'}</p>`
+      + `<button type="button" class="sn" data-s="new"><small>新着</small><strong>${n}</strong></button>`
+      + `<button type="button" class="sd" data-s="down"><small>値下げ</small><strong>${dn}</strong></button>`
+      + `<button type="button" data-s="fav"><small>気になる</small><strong>${fav}</strong></button>`;
+  }
+  document.addEventListener('click', (ev) => {
+    const b = ev.target.closest('#hSum button'); if (!b) return;
+    if (b.dataset.s === 'fav') { $('tab-favs').click(); return; }
+    H.kind = 'all'; H.type = b.dataset.s; H.days = 14; setSeg('hKindSeg', 'all'); setSeg('hTypeSeg', H.type); renderHistory();
+  });
   function renderHistory() {
+    renderSum();
     const evs = state.events.filter((e) => (H.kind === 'all' || e.kind === H.kind) && (H.type === 'all' || e.type === H.type) && state.byCode.has(e.code));
     const box = $('histList');
     if (!evs.length) { box.innerHTML = EMPTY('この条件の通知はまだありません。条件に合う新着と値下げが見つかり、メールで知らせると、ここに日付ごとに並びます。'); return; }
