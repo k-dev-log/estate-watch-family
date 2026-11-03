@@ -121,6 +121,9 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
 .bd-row.low .bar1 i { background: var(--muted); opacity: .45; }
 .bd-row .val { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
 .bd-row .sub2 { grid-column: 2 / 4; font-size: 12px; color: var(--muted); margin-top: -2px; }
+.mf { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.mf select, .mf input { font: inherit; font-size: 13px; color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+.mf select:disabled { opacity: .5; }
 </style>
 
 <style>html{-webkit-text-size-adjust:100%}body{margin:0}</style>
@@ -233,13 +236,16 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
         <button type="button" data-k="station" aria-pressed="false">駅別</button>
         <button type="button" data-k="layout" aria-pressed="false">間取り別</button>
       </div>
-      <label class="f" id="mWardLbl" hidden style="display:flex;gap:6px;align-items:center">区
+      <label class="mf" id="mWardLbl" hidden>区
         <select id="mWard"><option value="all">すべて</option></select>
       </label>
-      <label class="f" style="display:flex;gap:6px;align-items:center">築年帯
+      <label class="mf">築年帯
         <select id="mBand">
           <option value="all">すべて</option><option value="2016-">2016年〜</option><option value="2006-2015">2006〜2015年</option><option value="1982-2005">1982〜2005年</option><option value="-1981">〜1981年</option>
         </select>
+      </label>
+      <label class="mf" id="mYearLbl" hidden>または 竣工
+        <input type="number" id="mYear" min="1950" max="2100" step="1" placeholder="例：2010" inputmode="numeric" style="width:84px"> 年以降
       </label>
     </div>
     <div class="panel" id="bdPanel" hidden>
@@ -534,7 +540,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
   const bandOf = (y) => !y ? '不明' : y >= 2016 ? '2016-' : y >= 2006 ? '2006-2015' : y >= 1982 ? '1982-2005' : '-1981';
   const quant = (a, p) => { const s = a.slice().sort((x, y) => x - y); const i = (s.length - 1) * p; const lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); };
   function renderBreakdown() {
-    const k = state.mKind, band = $('mBand').value, view = M.view;
+    const k = state.mKind, view = M.view;
+    const yr = parseInt($('mYear').value, 10); const useYr = Number.isFinite(yr) && yr >= 1950;
+    $('mBand').disabled = useYr;
+    const band = useYr ? 'all' : $('mBand').value;
     const ls0 = state.listings.filter((r) => r.kind === k);
     const latest = ls0.reduce((m, r) => (r.last_seen > m ? r.last_seen : m), '');
     const wardSel = $('mWard'); const wards = [...new Set(ls0.map((r) => r.ward).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
@@ -543,7 +552,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     wardSel.value = wards.includes(cur) ? cur : 'all';
     const ward = wardSel.value;
     const ls = ls0.filter((r) => r.last_seen === latest && r.unit_price != null && isFinite(r.unit_price)
-      && (ward === 'all' || r.ward === ward) && (band === 'all' || bandOf(r.built_year) === band));
+      && (ward === 'all' || r.ward === ward) && (band === 'all' || bandOf(r.built_year) === band) && (!useYr || (r.built_year != null && r.built_year >= yr)));
     const groups = new Map();
     ls.forEach((r) => { const key = view === 'station' ? r.st : r.bl; if (!key) return; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(r); });
     const rows = [...groups.entries()].map(([key, g]) => {
@@ -554,7 +563,7 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     const conv = (u) => (k === 'rent' ? u : u * 3.30579 / 1e4);
     const fmtU = (u) => (k === 'rent' ? Math.round(u).toLocaleString('ja-JP') + '円/㎡' : conv(u).toFixed(0) + '万円/坪');
     const max = Math.max(...shown.map((r) => conv(r.med)), 1);
-    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場（${latest ? latest.slice(5).replace('-', '/') : '—'} の集計・${ls.length}件）`;
+    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場${useYr ? '・竣工' + yr + '年以降' : ''}（${latest ? latest.slice(5).replace('-', '/') : '—'} の集計・${ls.length}件）`;
     $('bdList').innerHTML = shown.length ? shown.map((r) => `<div class="bd-row ${r.n < 5 ? 'low' : ''}">
         <span class="lab">${esc(r.key)}</span>
         <span class="bar1"><i style="width:${(conv(r.med) / max * 100).toFixed(1)}%"></i></span>
@@ -565,9 +574,10 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
   }
   $('mViewSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; M.view = b.dataset.k; setSeg('mViewSeg', M.view); renderMarket(); });
   $('mWard').addEventListener('change', renderMarket);
+  $('mYear').addEventListener('input', renderMarket);
   function renderMarket() {
     const wardView = M.view === 'ward';
-    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('mWardLbl').hidden = wardView;
+    $('chartPanel').hidden = !wardView; $('tablePanel').hidden = !wardView; $('bdPanel').hidden = wardView; $('mWardLbl').hidden = wardView; $('mYearLbl').hidden = wardView;
     if (!wardView) { renderBreakdown(); return; }
     const k = state.mKind, band = $('mBand').value;
     const rows = state.stats.filter((s) => s.kind === k && s.band === band);
