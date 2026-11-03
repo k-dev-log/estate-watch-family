@@ -555,13 +555,12 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     $('mBand').disabled = useYr || useAge;
     const band = (useYr || useAge) ? 'all' : $('mBand').value;
     const ls0 = state.listings.filter((r) => r.kind === k);
-    const latest = ls0.reduce((m, r) => (r.last_seen > m ? r.last_seen : m), '');
     const wardSel = $('mWard'); const wards = [...new Set(ls0.map((r) => r.ward).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ja'));
     const cur = wardSel.value;
     wardSel.innerHTML = '<option value="all">すべて</option>' + wards.map((w) => `<option value="${esc(w)}">${esc(w)}</option>`).join('');
     wardSel.value = wards.includes(cur) ? cur : 'all';
     const ward = wardSel.value;
-    const ls = ls0.filter((r) => r.last_seen === latest && r.unit_price != null && isFinite(r.unit_price)
+    const ls = ls0.filter((r) => r.unit_price != null && isFinite(r.unit_price)
       && (ward === 'all' || r.ward === ward) && (band === 'all' || bandOf(r.built_year) === band) && (!minYear || (r.built_year != null && r.built_year >= minYear)));
     const groups = new Map();
     ls.forEach((r) => { const key = view === 'station' ? r.st : r.bl; if (!key) return; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(r); });
@@ -573,14 +572,14 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     const conv = (u) => (k === 'rent' ? u : u * 3.30579 / 1e4);
     const fmtU = (u) => (k === 'rent' ? Math.round(u).toLocaleString('ja-JP') + '円/㎡' : conv(u).toFixed(0) + '万円/坪');
     const max = Math.max(...shown.map((r) => conv(r.med)), 1);
-    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場${useAge ? '・築' + age + '年以内' : ''}${useYr ? '・竣工' + yr + '年以降' : ''}（${latest ? latest.slice(5).replace('-', '/') : '—'} の集計・${ls.length}件）`;
+    $('bdTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${view === 'station' ? '駅別' : '間取り別'}の相場${useAge ? '・築' + age + '年以内' : ''}${useYr ? '・竣工' + yr + '年以降' : ''}（登録済みの全物件・${ls.length}件）`;
     $('bdList').innerHTML = shown.length ? shown.map((r) => `<div class="bd-row ${r.n < 5 ? 'low' : ''}">
         <span class="lab">${esc(r.key)}</span>
         <span class="bar1"><i style="width:${(conv(r.med) / max * 100).toFixed(1)}%"></i></span>
         <span class="val">${fmtU(r.med)}</span>
         <span class="sub2">${r.n}件${r.n < 5 ? '（件数が少ないので参考値）' : ''} ・ 下位25% ${fmtU(r.p25)}${r.price != null ? ' ・ 価格の中央値 ' + (k === 'rent' ? yen(r.price) + '円' : manYen(r.price)) : ''}</span>
       </div>`).join('') : EMPTY('この条件に合う物件がありません。');
-    $('bdNote').textContent = (rows.length > LIM ? `件数の多い上位${LIM}件を表示しています。` : '') + '最新の集計で見えた物件の中央値です。推移ではありません（駅別・間取り別の履歴は、まだためていません）。' + (k === 'rent' ? '賃貸は管理費込みの月額の㎡単価です。' : '売買は掲載価格の坪単価です（成約価格ではありません）。');
+    $('bdNote').textContent = (rows.length > LIM ? `件数の多い上位${LIM}件を表示しています。` : '') + '登録済みの全物件（掲載が終わった物件も含む）の中央値です。推移ではありません（駅別・間取り別の履歴は、これからためます）。' + (k === 'rent' ? '賃貸は管理費込みの月額の㎡単価です。' : '売買は掲載価格の坪単価です（成約価格ではありません）。');
   }
   $('mViewSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; M.view = b.dataset.k; setSeg('mViewSeg', M.view); renderMarket(); });
   $('mWard').addEventListener('change', renderMarket);
