@@ -10,7 +10,7 @@
 <style>
 /* Layout: 一列の作業台。上に状態バー、タブで「通知履歴／物件一覧／気になる／相場／設定」を切り替え。 */
 :root {
-  --paper: #f5f7f8;
+  --paper: #ffffff;
   --sheet: #ffffff;
   --ink: #1b2a36;
   --muted: #5d6b76;
@@ -124,17 +124,6 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
 .sum strong { font-size: 24px; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .sum .sn strong { color: var(--good); } .sum .sd strong { color: var(--down); }
 .sum .sdate { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); margin: 0; }
-.item { gap: 8px; padding: 14px 16px; }
-.item-top { align-items: center; }
-.item-top .kind { font-size: 12.5px; color: var(--muted); }
-.item-name { font-size: 16px; line-height: 1.4; }
-.pricerow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.pricerow .price { font-size: 26px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.pricerow s { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.chip { font-weight: 700; padding: 2px 10px; }
-.chip.newc { background: var(--good-soft); color: var(--good); }
-.actions { margin-top: 2px; }
-.btn.primary { font-weight: 700; }
 </style>
 
 <style>html{-webkit-text-size-adjust:100%}body{margin:0}</style>
@@ -340,27 +329,27 @@ label.inl select { font: inherit; font-size: 13px; color: var(--ink); background
     const cut = (isDown && prev != null && price != null && prev > price) ? ' −' + priceTxt(r.kind, prev - price) : '';
     return `<article class="item ${r.status === 'dismissed' ? 'dismissed' : ''}" data-code="${esc(r.code)}">
       <div class="item-top">
+        <span class="chip ${r.kind}">${r.kind === 'rent' ? '賃貸' : '売買'}</span>
         ${ev ? `<span class="chip ${ev.type === 'down' ? 'down' : 'newc'}">${ev.type === 'down' ? '値下げ' + cut : '新着'}</span>` : isDown ? `<span class="chip down">値下げ${cut}</span>` : ''}
         ${o.fresh ? '<span class="chip fresh">前回から</span>' : ''}
-        <span class="kind">${[r.kind === 'rent' ? '賃貸' : '売買', esc(r.ward), esc(r.station)].filter(Boolean).join(' ・ ')}</span>
+        <span class="item-name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a></span>
+        ${d > 0 ? `<span class="chip disc num">駅相場より −${d.toFixed(0)}%</span>` : d < 0 ? `<span class="chip low num">駅相場より +${Math.abs(d).toFixed(0)}%</span>` : ''}
         ${r.status === 'interested' ? `<span class="chip int">気になる${r.marked_by ? '（' + esc(r.marked_by) + '）' : ''}</span>` : ''}
       </div>
-      <div class="item-name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a></div>
-      <div class="pricerow">
-        <span class="price">${priceTxt(r.kind, price)}</span>
-        ${isDown && prev ? `<s>${priceTxt(r.kind, prev)}</s>` : ''}
-      </div>
       <div class="facts">
+        <span class="price num">${priceTxt(r.kind, price)}</span>
+        ${isDown && prev ? `<span class="num">前回 ${priceTxt(r.kind, prev)}</span>` : ''}
         <span>${esc(r.layout)} <span class="num">${r.area == null ? '' : r.area.toFixed(1) + '㎡'}</span></span>
         <span>${unitText(r.kind, r.unit_price)}</span>
+        <span>${esc(r.station)}</span>
         <span>${r.built_year ? (r.kind === 'rent' ? '築' + (new Date().getFullYear() - r.built_year) + '年' : r.built_year + '年竣工') : ''}</span>
-        ${d > 0 ? `<span class="chip disc num">駅相場より −${d.toFixed(0)}%</span>` : d < 0 ? `<span class="chip low num">駅相場より +${Math.abs(d).toFixed(0)}%</span>` : ''}
+        <span>${esc(r.ward)}</span>
       </div>
       ${tr ? `<div class="trail">推移：${esc(tr)}</div>` : ''}
       <div class="detail" data-box hidden></div>
       <div class="facts"><span>初回 ${esc(r.first_seen)}</span><span>最終確認 ${esc(r.last_seen)}</span></div>
       <div class="actions">
-        ${r.status !== 'interested' ? '<button class="btn primary" type="button" data-act="interested">気になる</button>' : ''}
+        ${r.status !== 'interested' ? '<button class="btn" type="button" data-act="interested">気になる</button>' : ''}
         ${r.status !== 'dismissed' ? '<button class="btn" type="button" data-act="dismissed">見送り</button>' : ''}
         ${r.status !== 'new' ? '<button class="btn" type="button" data-act="new">未整理に戻す</button>' : ''}
         <button class="btn" type="button" data-detail="1">補足を見る</button>
