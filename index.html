@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>物件相場ウォッチ（家族用）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 一列の作業台。上に状態バー、タブで「通知履歴／物件一覧／気になる／相場／設定」を切り替え。 */
+:root {
+  --paper: #f5f7f8;
+  --sheet: #ffffff;
+  --ink: #1b2a36;
+  --muted: #5d6b76;
+  --line: #d9e0e5;
+  --accent: #1f5c7a;
+  --accent-soft: #e3eef4;
+  --good: #1e7a52;
+  --good-soft: #e2f2ea;
+  --down: #b4442b;
+  --down-soft: #f8e6e1;
+  --warn: #8a6410;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12191f; --sheet: #1a242c; --ink: #e3e9ee; --muted: #94a3ae; --line: #2c3a45;
+    --accent: #7db7d4; --accent-soft: #1d3240; --good: #6cc59a; --good-soft: #17302a;
+    --down: #ec8c74; --down-soft: #3a2420; --warn: #e2b85a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12191f; --sheet: #1a242c; --ink: #e3e9ee; --muted: #94a3ae; --line: #2c3a45;
+  --accent: #7db7d4; --accent-soft: #1d3240; --good: #6cc59a; --good-soft: #17302a;
+  --down: #ec8c74; --down-soft: #3a2420; --warn: #e2b85a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden]:not([hidden=until-found i]) { display: none !important; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 18px; }
+h1 { font-size: 22px; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; text-wrap: balance; }
+.head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.status { font-size: 13px; color: var(--muted); }
+.status b { color: var(--ink); font-weight: 500; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; font: inherit; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.tabs button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--sheet); color: var(--ink); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--sheet); }
+.btn { border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--sheet); font-weight: 500; }
+.btn:disabled { opacity: .5; cursor: default; }
+.list { display: grid; gap: 10px; }
+.item { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; }
+.item.dismissed { opacity: .55; }
+.item-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.item-name { font-weight: 700; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.item-name a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+.item-name a:hover { border-bottom-color: var(--accent); }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.rent { background: var(--accent-soft); color: var(--accent); }
+.chip.buy { background: var(--accent-soft); color: var(--accent); }
+.chip.disc { background: var(--good-soft); color: var(--good); font-weight: 500; }
+.chip.down { background: var(--down-soft); color: var(--down); font-weight: 500; }
+.chip.int { background: var(--good); color: var(--sheet); }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.facts .price { color: var(--ink); font-weight: 500; font-size: 15px; }
+.detail { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.empty { background: var(--sheet); border: 1px dashed var(--line); border-radius: 8px; padding: 20px; color: var(--muted); font-size: 14px; }
+.note { font-size: 12.5px; color: var(--muted); }
+.err { background: var(--down-soft); color: var(--down); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+.ok { color: var(--good); font-size: 13px; }
+.panel { background: var(--sheet); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.delta-up { color: var(--down); } .delta-dn { color: var(--good); }
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+form { display: grid; gap: 16px; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; background: var(--sheet); padding: 12px 14px 14px; margin: 0; display: grid; gap: 12px; min-width: 0; }
+legend { font-weight: 700; padding: 0 6px; }
+.sub { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .04em; margin-top: 2px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; }
+label.f { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
+label.f input, label.f select, textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+textarea { min-height: 64px; resize: vertical; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.checks label { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px 2px 6px; cursor: pointer; background: var(--paper); }
+.checks input:checked + span { color: var(--accent); font-weight: 500; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.savebar { position: sticky; bottom: 0; background: var(--paper); padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.chip.newc { background: var(--accent); color: var(--sheet); font-weight: 500; }
+.chip.fresh { background: var(--warn); color: var(--sheet); font-weight: 500; }
+.chip.low { background: var(--paper); color: var(--muted); border: 1px solid var(--line); }
+.day { display: grid; gap: 8px; }
+.day h2 { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.trail { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.pre { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--paper); }
+.pre button { border: 0; background: none; color: var(--ink); font: inherit; font-size: 13px; padding: 2px 10px; cursor: pointer; }
+.pre button + button { color: var(--muted); padding-inline: 8px; border-left: 1px solid var(--line); }
+.checks .rm { display: inline-flex; gap: 4px; align-items: center; font-size: 13px; border: 1px solid var(--accent); color: var(--accent); border-radius: 999px; padding: 2px 4px 2px 10px; background: var(--accent-soft); }
+.checks .rm button { border: 0; background: none; color: inherit; cursor: pointer; font: inherit; padding: 0 6px; }
+.bar .grow { flex: 1 1 auto; }
+label.inl { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+label.inl select { font: inherit; font-size: 13px; color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+@media (prefers-reduced-motion: no-preference) { .item { transition: opacity .2s; } }
+</style>
+
+<style>html{-webkit-text-size-adjust:100%}body{margin:0}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>物件相場ウォッチ<span class="note" style="font-weight:400">（家族用）</span></h1>
+    <div class="status" id="status">読み込み中…</div>
+  </div>
+  <div id="pageErr" class="err" hidden></div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-history" aria-selected="true" data-tab="history">通知履歴</button>
+    <button role="tab" id="tab-browse" aria-selected="false" data-tab="browse">物件一覧</button>
+    <button role="tab" id="tab-favs" aria-selected="false" data-tab="favs">気になる</button>
+    <button role="tab" id="tab-market" aria-selected="false" data-tab="market">相場</button>
+  </div>
+
+  <section id="history" role="tabpanel" aria-labelledby="tab-history" style="display:grid;gap:12px">
+    <div class="bar">
+      <div class="seg" id="hKindSeg">
+        <button type="button" data-k="all" aria-pressed="true">すべて</button>
+        <button type="button" data-k="rent" aria-pressed="false">賃貸</button>
+        <button type="button" data-k="buy" aria-pressed="false">売買</button>
+      </div>
+      <div class="seg" id="hTypeSeg">
+        <button type="button" data-k="all" aria-pressed="true">新着と値下げ</button>
+        <button type="button" data-k="new" aria-pressed="false">新着</button>
+        <button type="button" data-k="down" aria-pressed="false">値下げ</button>
+      </div>
+      <button class="btn" type="button" id="reload">再読み込み</button>
+    </div>
+    <p class="note" id="hNote">メールで知らせた物件の履歴です。初回の基準登録（条件に合う物件を最初にまとめて記録した分）は、通知していないので載りません。条件に合う全件は「物件一覧」で探せます。</p>
+    <div id="histList" style="display:grid;gap:18px"><div class="empty">履歴を読み込んでいます。</div></div>
+  </section>
+
+  <section id="browse" role="tabpanel" aria-labelledby="tab-browse" hidden style="display:grid;gap:12px">
+    <div class="panel">
+      <div class="bar">
+        <div class="seg" id="qKindSeg">
+          <button type="button" data-k="all" aria-pressed="true">すべて</button>
+          <button type="button" data-k="rent" aria-pressed="false">賃貸</button>
+          <button type="button" data-k="buy" aria-pressed="false">売買</button>
+        </div>
+        <label class="inl">状態
+          <select id="qStatus">
+            <option value="active">見送り以外</option>
+            <option value="week">直近7日の新着</option>
+            <option value="down">値下げあり</option>
+            <option value="interested">気になる</option>
+            <option value="dismissed">見送り</option>
+            <option value="all">すべて</option>
+          </select>
+        </label>
+        <label class="inl">並べ替え
+          <select id="qSort"></select>
+        </label>
+      </div>
+      <div class="sub">区</div>
+      <div class="checks" id="qWards"></div>
+      <div class="grid">
+        <label class="f">最寄駅（入力して選ぶ）<input type="text" id="qStInput" list="qStList" autocomplete="off" placeholder="例：豊洲"></label>
+        <label class="f">キーワード（物件名・住所）<input type="text" id="qText" autocomplete="off"></label>
+        <label class="f">間取り<select id="qLayout"></select></label>
+      </div>
+      <datalist id="qStList"></datalist>
+      <div class="checks" id="qStChips"></div>
+      <div class="grid">
+        <label class="f">価格 下限（万円）<input type="number" id="qPMin" min="0" step="1"></label>
+        <label class="f">価格 上限（万円）<input type="number" id="qPMax" min="0" step="1"></label>
+        <label class="f">面積 下限（㎡）<input type="number" id="qAMin" min="0" step="1"></label>
+        <label class="f">面積 上限（㎡）<input type="number" id="qAMax" min="0" step="1"></label>
+        <label class="f">竣工（年以降）<input type="number" id="qBuilt" min="1950" step="1"></label>
+        <label class="f">駅徒歩（分以内）<input type="number" id="qWalk" min="1" step="1"></label>
+      </div>
+      <p class="note">価格は、賃貸は込み賃料の月額、売買は掲載価格を、どちらも万円で指定します。割安率は、同じ最寄駅・同じ築年帯の中央値（㎡単価）との比較です。定期借家・1階・借地権などの物件が安く出やすいので、参考値として見てください。</p>
+      <div class="bar">
+        <input type="text" id="qPreName" placeholder="保存する名前" aria-label="保存する条件の名前" style="font:inherit;font-size:13px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:5px 8px;min-width:0;flex:0 1 180px">
+        <button class="btn" type="button" id="qPreSave">この条件を保存</button>
+        <button class="btn" type="button" id="qReset">条件をクリア</button>
+        <span id="qPresets" class="bar"></span>
+      </div>
+    </div>
+    <div class="bar"><span class="status" id="qCount"></span></div>
+    <div class="list" id="browseList"></div>
+    <button class="btn" type="button" id="qMore" hidden>さらに表示</button>
+  </section>
+
+  <section id="favs" role="tabpanel" aria-labelledby="tab-favs" hidden style="display:grid;gap:12px">
+    <div class="bar">
+      <div class="seg" id="vKindSeg">
+        <button type="button" data-k="all" aria-pressed="true">すべて</button>
+        <button type="button" data-k="rent" aria-pressed="false">賃貸</button>
+        <button type="button" data-k="buy" aria-pressed="false">売買</button>
+      </div>
+    </div>
+    <div class="list" id="favList"></div>
+  </section>
+
+  <section id="market" role="tabpanel" aria-labelledby="tab-market" hidden style="display:grid;gap:14px">
+    <div class="bar">
+      <div class="seg" id="mKindSeg">
+        <button type="button" data-k="rent" aria-pressed="true">賃貸</button>
+        <button type="button" data-k="buy" aria-pressed="false">売買</button>
+      </div>
+      <label class="f" style="display:flex;gap:6px;align-items:center">築年帯
+        <select id="mBand">
+          <option value="all">すべて</option><option value="2016-">2016年〜</option><option value="2006-2015">2006〜2015年</option><option value="1982-2005">1982〜2005年</option><option value="-1981">〜1981年</option>
+        </select>
+      </label>
+    </div>
+    <div class="panel chart">
+      <h2 id="chartTitle">区別の中央値の推移</h2>
+      <div id="chart"></div>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="panel">
+      <h2 id="tableTitle">最新の相場</h2>
+      <div class="tablewrap"><table id="mTable"><thead></thead><tbody></tbody></table></div>
+      <p class="note" id="mNote"></p>
+    </div>
+  </section>
+
+  <p class="note">この画面は家族用です。リンクは、家族以外に教えないでください。</p>
+</div>
+
+<script>
+(() => {
+  const SUPABASE_URL = 'https://ecthbmwteboumrxiwmof.supabase.co';
+  const ANON_KEY = 'sb_publishable_HmNpJ9DBuN4DGbYE0rzsbA_4JPNIy2e';   // 公開してよいキー。データは、リンクの合言葉がなければ読めない
+  const BANDS = { 'all': 'すべて', '2016-': '2016年〜', '2006-2015': '2006〜15年', '1982-2005': '1982〜2005年', '-1981': '〜1981年', '不明': '不明' };
+  const COLORS = ['var(--accent)', 'var(--good)', 'var(--down)', 'var(--warn)', 'var(--muted)', 'var(--ink)'];
+  const $ = (id) => document.getElementById(id);
+  const state = { me: '', listings: [], events: [], byCode: new Map(), evByCode: new Map(), lastVisit: null, stats: [], mKind: 'rent' };
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const yen = (n) => n == null ? '—' : Number(n).toLocaleString('ja-JP');
+  const manYen = (n) => { n = Number(n); if (!n) return '—'; if (n >= 1e8) { const o = Math.floor(n / 1e8), m = Math.round((n % 1e8) / 1e4); return o + '億' + (m ? m.toLocaleString('ja-JP') + '万' : '') + '円'; } return (n / 1e4).toLocaleString('ja-JP', { maximumFractionDigits: 1 }) + '万円'; };
+  const unitText = (kind, u) => u == null ? '—' : kind === 'rent' ? Math.round(u).toLocaleString('ja-JP') + '円/㎡' : (u * 3.30579 / 1e4).toFixed(0) + '万円/坪';
+
+  function showErr(where, e) {
+    const code = e && e.code;
+    const msg = code === 'forbidden' ? 'このリンクでは開けません。合言葉が違うか、無効になっています。リンクを送ってくれた人に、新しいリンクをもらってください。'
+      : code === 'no_token' ? 'リンクの末尾（# から後ろ）が欠けています。送ってもらったリンクを、そのまま開いてください。'
+      : code === 'network' ? '通信できませんでした。電波の状態を確認して、再読み込みしてください。'
+      : `読み込めませんでした（${String((e && e.message) || code || 'error').slice(0, 160)}）。`;
+    const box = where || $('pageErr'); box.textContent = msg; box.hidden = false; box.className = 'err';
+  }
+
+  // 合言葉は、リンクの末尾（#k=…）から取り、この端末に覚えておく（次からは、末尾がなくても開ける）
+  const TOKEN = (() => {
+    let t = '';
+    try { const m = (location.hash || '').match(/[#&]k=([0-9a-f]{16,128})/); if (m) { t = m[1]; localStorage.setItem('ew-family-token', t); } } catch {}
+    if (!t) { try { t = localStorage.getItem('ew-family-token') || ''; } catch {} }
+    return t;
+  })();
+  async function rpc(fn, args) {
+    if (!TOKEN) throw { code: 'no_token' };
+    let r;
+    try { r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_token: TOKEN, ...args }) }); }
+    catch { throw { code: 'network' }; }
+    if (!r.ok) { const t = await r.text().catch(() => ''); throw { code: (r.status === 400 && /forbidden/.test(t)) || r.status === 401 || r.status === 403 ? 'forbidden' : 'http', message: `${r.status} ${t.slice(0, 120)}` }; }
+    return r.json();
+  }
+
+  // ---------- tabs ----------
+  const TABS = ['history', 'browse', 'favs', 'market'];
+  document.querySelectorAll('[role=tab]').forEach((b) => b.addEventListener('click', () => selectTab(b.dataset.tab)));
+  function selectTab(t) {
+    document.querySelectorAll('[role=tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+    TABS.forEach((id) => { $(id).hidden = id !== t; });
+    try { localStorage.setItem('ew-tab', t); } catch {}
+  }
+  try { const t = localStorage.getItem('ew-tab') || (location.hash || '').slice(1); if (TABS.includes(t)) selectTab(t); } catch {}
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+
+  // ---------- shared: listings ----------
+  const stName = (s) => { s = String(s || ''); const m = s.match(/「(.+?)」/) || s.match(/\/(.+?駅)/); return m ? m[1].replace(/駅$/, '') : ''; };
+  const baseLayout = (l) => String(l || '').replace(/[+（(].*$/, '');
+  const toNum = (v) => (v == null || v === '' ? null : Number(v));
+  const todayJ = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const fmtDate = (d) => { const [y, m, dd] = d.split('-').map(Number); return `${m}/${dd}（${'日月火水木金土'[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]}）`; };
+  const priceTxt = (kind, p) => p == null ? '—' : kind === 'rent' ? yen(p) + '円/月' : manYen(p);
+  const normListing = (r) => {
+    ['walk', 'built_year', 'area', 'price', 'prev_price', 'first_price', 'unit_price', 'discount'].forEach((k) => { r[k] = toNum(r[k]); });
+    r.st = stName(r.station); r.bl = baseLayout(r.layout); return r;
+  };
+  const trailOf = (code) => (state.evByCode.get(code) || []).slice().sort((a, b) => a.event_date.localeCompare(b.event_date) || a.id - b.id)
+    .map((e) => `${fmtDate(e.event_date)} ${e.type === 'down' ? '値下げ' : '新着'} ${priceTxt(e.kind, e.price)}`).join(' → ');
+
+  function card(r, o = {}) {
+    const ev = o.ev;
+    const price = ev ? ev.price : r.price;
+    const isDown = ev ? ev.type === 'down' : (r.flag === 'down' && r.prev_price != null && r.price < r.prev_price);
+    const prev = ev ? ev.prev_price : (isDown ? r.prev_price : null);
+    const d = r.discount;
+    const tr = o.trail ? trailOf(r.code) : '';
+    return `<article class="item ${r.status === 'dismissed' ? 'dismissed' : ''}" data-code="${esc(r.code)}">
+      <div class="item-top">
+        <span class="chip ${r.kind}">${r.kind === 'rent' ? '賃貸' : '売買'}</span>
+        ${ev ? `<span class="chip ${ev.type === 'down' ? 'down' : 'newc'}">${ev.type === 'down' ? '値下げ' : '新着'}</span>` : isDown ? '<span class="chip down">値下げ</span>' : ''}
+        ${o.fresh ? '<span class="chip fresh">前回から</span>' : ''}
+        <span class="item-name"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.name)}</a></span>
+        ${d > 0 ? `<span class="chip disc num">駅相場より −${d.toFixed(0)}%</span>` : d < 0 ? `<span class="chip low num">駅相場より +${Math.abs(d).toFixed(0)}%</span>` : ''}
+        ${r.status === 'interested' ? `<span class="chip int">気になる${r.marked_by ? '（' + esc(r.marked_by) + '）' : ''}</span>` : ''}
+      </div>
+      <div class="facts">
+        <span class="price num">${priceTxt(r.kind, price)}</span>
+        ${isDown && prev ? `<span class="num">前回 ${priceTxt(r.kind, prev)}</span>` : ''}
+        <span>${esc(r.layout)} <span class="num">${r.area == null ? '' : r.area.toFixed(1) + '㎡'}</span></span>
+        <span>${unitText(r.kind, r.unit_price)}</span>
+        <span>${esc(r.station)}</span>
+        <span>${r.built_year ? (r.kind === 'rent' ? '築' + (new Date().getFullYear() - r.built_year) + '年' : r.built_year + '年竣工') : ''}</span>
+        <span>${esc(r.ward)}</span>
+      </div>
+      ${tr ? `<div class="trail">推移：${esc(tr)}</div>` : ''}
+      <div class="detail" data-box hidden></div>
+      <div class="facts"><span>初回 ${esc(r.first_seen)}</span><span>最終確認 ${esc(r.last_seen)}</span></div>
+      <div class="actions">
+        ${r.status !== 'interested' ? '<button class="btn" type="button" data-act="interested">気になる</button>' : ''}
+        ${r.status !== 'dismissed' ? '<button class="btn" type="button" data-act="dismissed">見送り</button>' : ''}
+        ${r.status !== 'new' ? '<button class="btn" type="button" data-act="new">未整理に戻す</button>' : ''}
+        <button class="btn" type="button" data-detail="1">補足を見る</button>
+      </div>
+    </article>`;
+  }
+  const EMPTY = (t) => `<div class="empty">${t}</div>`;
+  const setSeg = (id, v) => $(id).querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.k === v)));
+  function renderAll() { renderHistory(); renderBrowse(); renderFavs(); }
+
+  // ---------- history ----------
+  const H = { kind: 'all', type: 'all', days: 14 };
+  function renderHistory() {
+    const evs = state.events.filter((e) => (H.kind === 'all' || e.kind === H.kind) && (H.type === 'all' || e.type === H.type) && state.byCode.has(e.code));
+    const box = $('histList');
+    if (!evs.length) { box.innerHTML = EMPTY('この条件の通知はまだありません。条件に合う新着と値下げが見つかり、メールで知らせると、ここに日付ごとに並びます。'); return; }
+    const dates = [...new Set(evs.map((e) => e.event_date))];
+    box.innerHTML = dates.slice(0, H.days).map((d) => {
+      const g = evs.filter((e) => e.event_date === d); const n = g.filter((e) => e.type === 'new').length;
+      return `<div class="day"><h2>${fmtDate(d)} <span class="note">新着 ${n}件・値下げ ${g.length - n}件</span></h2><div class="list">${
+        g.map((e) => card(state.byCode.get(e.code), { ev: e, fresh: !!state.lastVisit && d > state.lastVisit, trail: false })).join('')}</div></div>`;
+    }).join('') + (dates.length > H.days ? '<button class="btn" type="button" id="hMore">さらに前の日を表示</button>' : '');
+  }
+  $('hKindSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; H.kind = b.dataset.k; setSeg('hKindSeg', H.kind); H.days = 14; renderHistory(); });
+  $('hTypeSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; H.type = b.dataset.k; setSeg('hTypeSeg', H.type); H.days = 14; renderHistory(); });
+
+  // ---------- browse (search) ----------
+  const Q0 = { kind: 'all', wards: [], sts: [], pmin: '', pmax: '', amin: '', amax: '', layout: '', built: '', walk: '', status: 'active', text: '', sort: 'new' };
+  let Q = { ...Q0, ...store.get('ew-filter', {}) }; let qShown = 50;
+  const drop = (r) => (r.flag === 'down' && r.prev_price != null ? r.prev_price - r.price : 0);
+  const SORTS = {
+    new: ['新しい順（初めて見た日）', (a, b) => b.first_seen.localeCompare(a.first_seen) || a.code.localeCompare(b.code)],
+    priceAsc: ['価格が安い順', (a, b) => a.price - b.price],
+    priceDesc: ['価格が高い順', (a, b) => b.price - a.price],
+    unitAsc: ['㎡単価が安い順', (a, b) => (a.unit_price ?? 1e12) - (b.unit_price ?? 1e12)],
+    areaDesc: ['面積が広い順', (a, b) => (b.area ?? 0) - (a.area ?? 0)],
+    builtDesc: ['築が新しい順', (a, b) => (b.built_year ?? 0) - (a.built_year ?? 0)],
+    walkAsc: ['駅から近い順', (a, b) => (a.walk ?? 99) - (b.walk ?? 99)],
+    discDesc: ['割安率が高い順', (a, b) => (b.discount ?? -999) - (a.discount ?? -999)],
+    dropDesc: ['値下げ幅が大きい順', (a, b) => drop(b) - drop(a)]
+  };
+  $('qSort').innerHTML = Object.entries(SORTS).map(([k, v]) => `<option value="${k}">${v[0]}</option>`).join('');
+  function matches(r) {
+    if (Q.kind !== 'all' && r.kind !== Q.kind) return false;
+    if (Q.wards.length && !Q.wards.includes(r.ward)) return false;
+    if (Q.sts.length && !Q.sts.includes(r.st)) return false;
+    if (Q.layout && r.bl !== Q.layout) return false;
+    const pm = r.price / 1e4;
+    if (Q.pmin !== '' && pm < Number(Q.pmin)) return false;
+    if (Q.pmax !== '' && pm > Number(Q.pmax)) return false;
+    if (Q.amin !== '' && (r.area ?? 0) < Number(Q.amin)) return false;
+    if (Q.amax !== '' && (r.area ?? 0) > Number(Q.amax)) return false;
+    if (Q.built !== '' && (r.built_year ?? 0) < Number(Q.built)) return false;
+    if (Q.walk !== '' && (r.walk ?? 99) > Number(Q.walk)) return false;
+    if (Q.text) { const hay = (r.name + ' ' + (r.address || '') + ' ' + r.station + ' ' + r.ward).toLowerCase(); if (!Q.text.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w))) return false; }
+    const wk = new Date(Date.now() + 9 * 3600e3 - 7 * 864e5).toISOString().slice(0, 10);
+    switch (Q.status) {
+      case 'active': return r.status !== 'dismissed';
+      case 'week': return r.status !== 'dismissed' && r.first_seen >= wk;
+      case 'down': return r.status !== 'dismissed' && r.flag === 'down';
+      case 'interested': return r.status === 'interested';
+      case 'dismissed': return r.status === 'dismissed';
+      default: return true;
+    }
+  }
+  function renderBrowse() {
+    const rows = state.listings.filter(matches).sort(SORTS[Q.sort] ? SORTS[Q.sort][1] : SORTS.new[1]);
+    $('qCount').innerHTML = `<b class="num">${rows.length}</b>件（登録全体 <span class="num">${state.listings.length}</span>件）`;
+    $('browseList').innerHTML = rows.length ? rows.slice(0, qShown).map((r) => card(r)).join('') : EMPTY('条件に合う物件がありません。条件をゆるめてください。');
+    $('qMore').hidden = rows.length <= qShown;
+    if (rows.length > qShown) $('qMore').textContent = `さらに表示（残り ${rows.length - qShown}件）`;
+  }
+  function buildFilterControls() {
+    const wards = [...new Set(state.listings.map((r) => r.ward))].sort((a, b) => a.localeCompare(b, 'ja'));
+    $('qWards').innerHTML = wards.map((w) => `<label><input type="checkbox" name="qw" value="${esc(w)}"><span>${esc(w)}</span></label>`).join('');
+    const lays = [...new Set(state.listings.map((r) => r.bl))].filter(Boolean).sort();
+    $('qLayout').innerHTML = '<option value="">すべて</option>' + lays.map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    $('qStList').innerHTML = [...new Set(state.listings.map((r) => r.st))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ja')).map((s) => `<option value="${esc(s)}"></option>`).join('');
+    writeFilter();
+  }
+  function writeFilter() {
+    setSeg('qKindSeg', Q.kind);
+    $('qStatus').value = Q.status; $('qSort').value = SORTS[Q.sort] ? Q.sort : 'new';
+    $('qText').value = Q.text; $('qLayout').value = Q.layout;
+    ['PMin:pmin', 'PMax:pmax', 'AMin:amin', 'AMax:amax', 'Built:built', 'Walk:walk'].forEach((p) => { const [id, k] = p.split(':'); $('q' + id).value = Q[k]; });
+    document.querySelectorAll('input[name=qw]').forEach((i) => { i.checked = Q.wards.includes(i.value); });
+    $('qStChips').innerHTML = Q.sts.map((s, i) => `<span class="rm">${esc(s)}<button type="button" data-rmst="${i}" aria-label="${esc(s)}を外す">×</button></span>`).join('');
+    renderPresets();
+  }
+  function readFilter() {
+    Q.status = $('qStatus').value; Q.sort = $('qSort').value; Q.text = $('qText').value.trim(); Q.layout = $('qLayout').value;
+    ['PMin:pmin', 'PMax:pmax', 'AMin:amin', 'AMax:amax', 'Built:built', 'Walk:walk'].forEach((p) => { const [id, k] = p.split(':'); Q[k] = $('q' + id).value.trim(); });
+    Q.wards = [...document.querySelectorAll('input[name=qw]:checked')].map((i) => i.value);
+  }
+  function filterChanged() { readFilter(); qShown = 50; store.set('ew-filter', Q); renderBrowse(); }
+  ['qStatus', 'qSort', 'qLayout', 'qPMin', 'qPMax', 'qAMin', 'qAMax', 'qBuilt', 'qWalk', 'qText'].forEach((id) => { $(id).addEventListener('input', filterChanged); $(id).addEventListener('change', filterChanged); });
+  $('qWards').addEventListener('change', filterChanged);
+  $('qKindSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; Q.kind = b.dataset.k; setSeg('qKindSeg', Q.kind); filterChanged(); });
+  $('qStInput').addEventListener('change', () => {
+    const v = $('qStInput').value.trim(); $('qStInput').value = '';
+    if (v && !Q.sts.includes(v)) { Q.sts.push(v); writeFilter(); filterChanged(); }
+  });
+  $('qReset').addEventListener('click', () => { Q = { ...Q0, kind: Q.kind }; writeFilter(); filterChanged(); });
+  let presets = store.get('ew-presets', []);
+  function renderPresets() {
+    $('qPresets').innerHTML = presets.map((p, i) => `<span class="pre"><button type="button" data-pre="${i}">${esc(p.name)}</button><button type="button" data-predel="${i}" aria-label="${esc(p.name)}を削除">×</button></span>`).join('');
+  }
+  $('qPreSave').addEventListener('click', () => {
+    const name = $('qPreName').value.trim(); if (!name) { $('qPreName').focus(); return; }
+    readFilter(); presets = presets.filter((p) => p.name !== name).concat([{ name, f: { ...Q } }]).slice(-12);
+    store.set('ew-presets', presets); $('qPreName').value = ''; renderPresets();
+  });
+
+  // ---------- favs ----------
+  const V = { kind: 'all' };
+  function renderFavs() {
+    const rows = state.listings.filter((r) => r.status === 'interested' && (V.kind === 'all' || r.kind === V.kind)).sort((a, b) => b.last_seen.localeCompare(a.last_seen));
+    $('favList').innerHTML = rows.length ? rows.map((r) => card(r, { trail: true })).join('') : EMPTY('「気になる」を付けた物件はまだありません。通知履歴や物件一覧のカードにある「気になる」を押すと、ここに集まります。');
+  }
+  $('vKindSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; V.kind = b.dataset.k; setSeg('vKindSeg', V.kind); renderFavs(); });
+
+  // ---------- card actions (all lists) ----------
+  document.addEventListener('click', async (ev) => {
+    const t = ev.target;
+    if (t.closest('#hMore')) { H.days += 14; renderHistory(); return; }
+    if (t.closest('#qMore')) { qShown += 50; renderBrowse(); return; }
+    const rs = t.closest('[data-rmst]'); if (rs) { Q.sts.splice(Number(rs.dataset.rmst), 1); writeFilter(); filterChanged(); return; }
+    const pr = t.closest('[data-pre]'); if (pr) { const p = presets[Number(pr.dataset.pre)]; if (p) { Q = { ...Q0, ...p.f }; writeFilter(); filterChanged(); } return; }
+    const pd = t.closest('[data-predel]'); if (pd) { presets.splice(Number(pd.dataset.predel), 1); store.set('ew-presets', presets); renderPresets(); return; }
+    const a = t.closest('button[data-act]');
+    if (a) {
+      const code = a.closest('[data-code]').dataset.code; const st = a.dataset.act;
+      if (!/^j?nc_\d+$/.test(code) || !['new', 'interested', 'dismissed'].includes(st)) return;
+      a.disabled = true;
+      try {
+        await rpc('estate_family_mark', { p_code: code, p_status: st });
+        const row = state.byCode.get(code); if (row) { row.status = st; row.marked_by = st === 'new' ? null : state.me; }
+        renderAll(); updateStatusBar();
+      } catch (e) { a.disabled = false; showErr(null, e); }
+      return;
+    }
+    const dt = t.closest('button[data-detail]');
+    if (dt) {
+      const card_ = dt.closest('[data-code]'); const code = card_.dataset.code; const box = card_.querySelector('[data-box]');
+      if (!/^j?nc_\d+$/.test(code)) return;
+      if (!box.hidden) { box.hidden = true; dt.textContent = '補足を見る'; return; }
+      const row = state.byCode.get(code);
+      box.textContent = (row && row.detail) || '補足はありません（通知した物件だけ、詳細ページから契約期間・権利形態などを取っています）。';
+      box.hidden = false; dt.textContent = '補足を閉じる';
+    }
+  });
+
+  // ---------- market ----------
+  function renderMarket() {
+    const k = state.mKind, band = $('mBand').value;
+    const rows = state.stats.filter((s) => s.kind === k && s.band === band);
+    const dates = [...new Set(rows.map((s) => s.run_date))].sort();
+    const wards = [...new Set(rows.map((s) => s.ward))].sort((a, b) => (a === '全体') - (b === '全体') || a.localeCompare(b, 'ja'));
+    $('chartTitle').textContent = `${k === 'rent' ? '賃貸' : '売買'}・${BANDS[band]}：区別の中央値の推移（${k === 'rent' ? '円/㎡・管理費込み' : '万円/坪'}）`;
+    const val = (s) => k === 'rent' ? Number(s.median_unit) : Number(s.median_unit) * 3.30579 / 1e4;
+    const chart = $('chart'), legend = $('legend');
+    if (dates.length < 2) {
+      chart.innerHTML = `<div class="empty">推移のグラフは2日分以上のデータがたまると表示されます（現在 ${dates.length} 日分）。</div>`;
+      legend.innerHTML = '';
+    } else {
+      const W = 720, H = 260, L = 56, R = 16, T = 12, B = 30;
+      const pts = rows.map(val).filter((v) => isFinite(v));
+      let lo = Math.min(...pts), hi = Math.max(...pts); const pad = (hi - lo) * 0.1 || hi * 0.05 || 1; lo -= pad; hi += pad;
+      const x = (d) => L + (dates.indexOf(d) / (dates.length - 1)) * (W - L - R);
+      const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+      const ticks = 4; let g = '';
+      for (let i = 0; i <= ticks; i++) { const v = lo + (hi - lo) * i / ticks; const yy = y(v); g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${k === 'rent' ? Math.round(v).toLocaleString('ja-JP') : v.toFixed(0)}</text>`; }
+      const step = Math.max(1, Math.ceil(dates.length / 6));
+      dates.forEach((d, i) => { if (i % step === 0 || i === dates.length - 1) g += `<text x="${x(d)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--font-data)">${d.slice(5).replace('-', '/')}</text>`; });
+      wards.forEach((w, i) => {
+        const c = COLORS[i % COLORS.length];
+        const ser = rows.filter((s) => s.ward === w).sort((a, b) => a.run_date.localeCompare(b.run_date));
+        const path = ser.map((s, j) => (j ? 'L' : 'M') + x(s.run_date).toFixed(1) + ' ' + y(val(s)).toFixed(1)).join(' ');
+        const last = ser[ser.length - 1];
+        g += `<path d="${path}" fill="none" stroke="${c}" stroke-width="${w === '全体' ? 1.5 : 2}" ${w === '全体' ? 'stroke-dasharray="4 3"' : ''}/>`;
+        if (last) g += `<circle cx="${x(last.run_date)}" cy="${y(val(last))}" r="3" fill="${c}"/>`;
+      });
+      chart.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="区別の中央値の推移">${g}</svg>`;
+      legend.innerHTML = wards.map((w, i) => `<span><i style="background:${COLORS[i % COLORS.length]}"></i>${esc(w)}</span>`).join('');
+    }
+    // table: latest vs ~4 weeks ago
+    const latest = dates[dates.length - 1];
+    const target = latest ? new Date(new Date(latest).getTime() - 28 * 864e5).toISOString().slice(0, 10) : null;
+    const prevDate = dates.filter((d) => d <= target).pop();
+    $('tableTitle').textContent = latest ? `最新の相場（${latest}）` : '最新の相場';
+    const th = $('mTable').querySelector('thead'), tb = $('mTable').querySelector('tbody');
+    th.innerHTML = `<tr><th>区</th><th>築年帯</th><th>件数</th><th>中央値 ${k === 'rent' ? '円/㎡' : '万円/坪'}</th><th>下位25% ${k === 'rent' ? '円/㎡' : '万円/坪'}</th><th>価格の中央値</th><th>4週前比</th></tr>`;
+    const lrows = state.stats.filter((s) => s.kind === k && s.run_date === latest && (band === 'all' ? true : s.band === band))
+      .sort((a, b) => (a.ward === '全体') - (b.ward === '全体') || a.ward.localeCompare(b.ward, 'ja') || Object.keys(BANDS).indexOf(a.band) - Object.keys(BANDS).indexOf(b.band));
+    if (!lrows.length) { tb.innerHTML = `<tr><td colspan="7" style="text-align:left;color:var(--muted)">まだデータがありません。最初の自動チェックの後に表示されます。</td></tr>`; }
+    else tb.innerHTML = lrows.map((s) => {
+      const p = prevDate && state.stats.find((z) => z.kind === k && z.run_date === prevDate && z.ward === s.ward && z.band === s.band);
+      const ch = p ? (Number(s.median_unit) / Number(p.median_unit) - 1) * 100 : null;
+      const p25 = k === 'rent' ? Number(s.p25_unit) : Number(s.p25_unit) * 3.30579 / 1e4;
+      return `<tr><td>${esc(s.ward)}</td><td>${esc(BANDS[s.band] || s.band)}</td><td class="num">${s.n}</td><td class="num">${k === 'rent' ? Math.round(val(s)).toLocaleString('ja-JP') : val(s).toFixed(0)}</td><td class="num">${k === 'rent' ? Math.round(p25).toLocaleString('ja-JP') : p25.toFixed(0)}</td><td class="num">${k === 'rent' ? yen(s.median_price) + '円' : manYen(s.median_price)}</td><td class="num ${ch > 0 ? 'delta-up' : ch < 0 ? 'delta-dn' : ''}">${ch == null ? '—' : (ch > 0 ? '+' : '') + ch.toFixed(1) + '%'}</td></tr>`;
+    }).join('');
+    $('mNote').textContent = k === 'rent' ? '賃貸はSUUMOの掲載物件（重複掲載をまとめた後）の管理費込み月額の㎡単価です。' : '売買はSUUMOの中古マンション掲載価格（成約価格ではありません）を坪単価にしたものです。';
+  }
+  $('mKindSeg').addEventListener('click', (ev) => { const b = ev.target.closest('button'); if (!b) return; state.mKind = b.dataset.k; $('mKindSeg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); renderMarket(); });
+  $('mBand').addEventListener('change', renderMarket);
+
+  // ---------- load ----------
+  function updateStatusBar() {
+    const lastRun = state.stats.length ? state.stats[state.stats.length - 1].run_date : null;
+    const fav = state.listings.filter((r) => r.status === 'interested').length;
+    $('status').innerHTML = `最終集計 <b class="num">${lastRun || '—'}</b>・登録 <b class="num">${state.listings.length}</b>件・気になる <b class="num">${fav}</b>件`;
+  }
+  async function loadAll() {
+    $('pageErr').hidden = true;
+    try {
+      const d = await rpc('estate_family_data', {});
+      state.me = d.me || '';
+      state.listings = (d.listings || []).map(normListing);
+      state.events = (d.events || []).map((e) => ({ ...e, id: Number(e.id), price: toNum(e.price), prev_price: toNum(e.prev_price) }));
+      state.stats = d.stats || [];
+      state.byCode = new Map(state.listings.map((r) => [r.code, r]));
+      state.evByCode = new Map(); state.events.forEach((e) => { if (!state.evByCode.has(e.code)) state.evByCode.set(e.code, []); state.evByCode.get(e.code).push(e); });
+      state.lastVisit = store.get('ew-last', null);
+      buildFilterControls(); renderAll(); renderMarket(); updateStatusBar();
+      store.set('ew-last', todayJ());
+    } catch (e) { showErr(null, e); $('status').textContent = '読み込めませんでした'; }
+  }
+  $('reload').addEventListener('click', loadAll);
+
+  loadAll();
+})();
+</script>
+</body>
+</html>
